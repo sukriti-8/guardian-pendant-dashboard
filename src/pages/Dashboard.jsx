@@ -1,69 +1,48 @@
 import { useState, useEffect } from "react";
 import LiveMap from "../components/LiveMap";
+import { supabase } from "../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { Battery, MapPin, Wifi, Cpu, Activity, Clock, Shield, AlertTriangle } from "lucide-react";
-
+import { Battery, MapPin, Wifi, Cpu, Activity, Clock } from "lucide-react";
 export default function Dashboard() {
   const [emergency, setEmergency] = useState(false);
   const [step, setStep] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [gps, setGps] = useState({ lat: 17.3850, lng: 78.4867 });
   const [battery, setBattery] = useState(92);
-  const [trackingInterval, setTrackingInterval] = useState("Idle");
+  useEffect(() => { //realtime push of data
+    const channel = supabase
+      .channel("emergency-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "emergency_logs",
+        },
+        (payload) => {
+          console.log("New emergency:", payload.new);
 
-  // ----- REAL-TIME INTEGRATION (comment out mock and uncomment this when Wokwi is ready) -----
-  /*
-  useEffect(() => {
-    if (emergency) {
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch("http://<wokwi-ip>/data");
-          const data = await res.json();
-          setGps({ lat: data.latitude, lng: data.longitude });
-          setBattery(data.battery);
-          // Update tracking interval from data or compute
-          setTrackingInterval(data.interval || "10s");
-        } catch (err) {
-          console.error("Wokwi fetch error:", err);
+          setGps({
+            lat: payload.new.latitude,
+            lng: payload.new.longitude,
+          });
+
+          setBattery(payload.new.battery);
         }
-      }, 2000);
-      return () => clearInterval(interval);
-    } else {
-      setGps({ lat: 17.3850, lng: 78.4867 });
-      setBattery(92);
-      setTrackingInterval("Idle");
-    }
-  }, [emergency]);
-  */
+      )
+      .subscribe();
 
-  // ----- MOCK SIMULATION (keep for demo) -----
-  useEffect(() => {
-    if (emergency) {
-      const interval = setInterval(() => {
-        setGps((prev) => ({
-          lat: prev.lat + (Math.random() - 0.5) * 0.0005,
-          lng: prev.lng + (Math.random() - 0.5) * 0.0005,
-        }));
-        setBattery((prev) => Math.max(70, prev - 0.3));
-        // Update tracking interval based on step
-        if (step >= 5) setTrackingInterval("10s");
-        else if (step >= 4) setTrackingInterval("30s");
-        else setTrackingInterval("60s");
-      }, 1500);
-      return () => clearInterval(interval);
-    } else {
-      setGps({ lat: 17.3850, lng: 78.4867 });
-      setBattery(92);
-      setTrackingInterval("Idle");
-    }
-  }, [emergency, step]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+  
 
-  // ---------- SOS Timeline ----------
+  // SOS Timeline
   useEffect(() => {
     if (!emergency) {
       setStep(0);
       setToasts([]);
-      setTrackingInterval("Idle");
       return;
     }
     let current = 0;
@@ -85,6 +64,7 @@ export default function Dashboard() {
     }, 800);
     return () => clearInterval(interval);
   }, [emergency]);
+  
 
   // Auto-dismiss toasts
   useEffect(() => {
@@ -94,21 +74,9 @@ export default function Dashboard() {
     }
   }, [toasts]);
 
-  // ----- Device Health items with extra features -----
-  const healthItems = [
-    `GPS : ${step >= 2 ? "Connected" : "Searching…"}`,
-    `Camera : ${step >= 3 ? "Recording" : "Ready"}`,
-    `Microphone : ${step >= 3 ? "Recording" : "Standby"}`,
-    `Network : ${step >= 4 ? "Uploading" : "Connected"}`,
-    `Battery : ${Math.round(battery)}%`,
-    `Tracking : ${trackingInterval}`,
-    `Evidence : ${step >= 3 ? (step >= 6 ? "Uploaded" : "Stored locally") : "None"}`,
-    emergency ? `⚠️ Tamper Detection : Active` : `Tamper Detection : Off`,
-  ];
-
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header – fixed */}
+      {/* Header – fixed top */}
       <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
@@ -116,17 +84,38 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => {
-              setStep(0);
-              setToasts([]);
-              setEmergency(!emergency);
-            }}
+            onClick={async () => {
+                const newEmergency = !emergency;
+
+                setStep(0);
+                setToasts([]);
+                setEmergency(newEmergency);
+
+                if (newEmergency) {
+                  const { error } = await supabase.from("emergency_logs").insert([
+                    {
+                      latitude: 17.385 + Math.random() * 0.01,
+                      longitude: 78.4867 + Math.random() * 0.01,
+                      battery: 92,
+                      status: "Emergency",
+                    },
+                  ]);
+
+                  if (error) {
+                    console.error(error);
+                  }
+                } else {
+                  setGps({ lat: 17.3850, lng: 78.4867 });
+                  setBattery(92);
+                }
+              }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium text-sm transition flex items-center gap-2 shadow-sm"
           >
             <Activity className="w-4 h-4" />
             {emergency ? "Reset" : "Simulate SOS"}
           </button>
           <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white ${emergency ? "bg-red-500" : "bg-green-500"}`}>
+            
             <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
             {emergency ? "EMERGENCY" : "SAFE"}
           </div>
@@ -205,7 +194,13 @@ export default function Dashboard() {
           step >= 6 ? "Father   ✓ Delivered (10:14:29)" : "Father   Pending",
           step >= 6 ? "Police   ✓ Delivered (10:14:31)" : "Police   Pending",
         ]} />
-        <Panel title="Device Health" icon="⚙️" items={healthItems} />
+        <Panel title="Device Health" icon="⚙️" items={[
+          `GPS : ${step >= 2 ? "Connected" : "Searching…"}`,
+          `Camera : ${step >= 3 ? "Recording" : "Ready"}`,
+          `Microphone : ${step >= 3 ? "Recording" : "Standby"}`,
+          `Network : ${step >= 4 ? "Uploading" : "Connected"}`,
+          `Battery : ${Math.round(battery)}%`,
+        ]} />
       </div>
     </div>
   );
