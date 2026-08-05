@@ -9,7 +9,7 @@ export default function Dashboard() {
   const [toasts, setToasts] = useState([]);
   const [gps, setGps] = useState({ lat: 17.3850, lng: 78.4867 });
   const [battery, setBattery] = useState(92);
-  useEffect(() => { //realtime push of data
+  useEffect(() => {
     const channel = supabase
       .channel("emergency-updates")
       .on(
@@ -20,17 +20,21 @@ export default function Dashboard() {
           table: "emergency_logs",
         },
         (payload) => {
-          console.log("New emergency:", payload.new);
+         
+
+          setEmergency(true);
 
           setGps({
-            lat: payload.new.latitude,
-            lng: payload.new.longitude,
+            lat: Number(payload.new.latitude),
+            lng: Number(payload.new.longitude),
           });
 
-          setBattery(payload.new.battery);
+          setBattery(Number(payload.new.battery));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        
+      });
 
     return () => {
       supabase.removeChannel(channel);
