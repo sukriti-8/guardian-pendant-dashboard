@@ -196,7 +196,7 @@ export default function Dashboard() {
         <Panel title="Emergency Contacts" icon="👤" items={[
           step >= 6 ? "Mother   ✓ Delivered (10:14:28)" : "Mother   Pending",
           step >= 6 ? "Father   ✓ Delivered (10:14:29)" : "Father   Pending",
-          step >= 6 ? "Police   ✓ Delivered (10:14:31)" : "Police   Pending",
+          step >= 6 ? "Guardian   ✓ Delivered (10:14:31)" : "Guardian   Pending",
         ]} />
         <Panel title="Device Health" icon="⚙️" items={[
           `GPS : ${step >= 2 ? "Connected" : "Searching…"}`,
